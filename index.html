@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Random Stock</title>
+    <style>
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+        }
+
+        body {
+            background: #001f3f;
+        }
+
+        div {
+            text-align: center;
+        }
+
+        .axis line,
+        .axis path,
+        .axis text {
+            stroke: #E7DECD;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="stockchart"></div>
+
+    <script src="https://d3js.org/d3.v4.min.js"></script>
+    <script src="json.js"></script>
+    <script>
+        var randomTicker = tickers[Math.floor(Math.random() * 506)];
+        var margin = { top: 30, right: 20, bottom: 30, left: 50 },
+            width = 800 - margin.left - margin.right,
+            height = 400 - margin.top - margin.bottom;
+
+        var svg = d3.select('.stockchart')
+            .append('svg')
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+            .append("g")
+            .attr("transform", `translate(${margin.left} , ${margin.top})`);
+
+        svg.append('text').text(`Name: ${randomTicker.name} - Symbol ${randomTicker.symbol}`)
+            .attr("transform", `translate(${width / 2 - 80} , 0)`)
+            .attr('stroke', 'white');
+
+        d3.json(`https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${randomTicker.symbol}&apikey=CBM29UQZITQM3E31`, CreateChart);
+
+
+        function CreateChart(data) {
+            var data = data["Time Series (Daily)"];
+            var newArr = Object.keys(data).map(d => {
+                return { 'close': data[d]['4. close'], 'date': Date.parse(d) };
+            });
+            newArr.sort(function (a, b) { return a.date - b.date; })
+            delete data;
+
+            //return min and max for close
+            var xExtent = d3.extent(newArr, d => d.date);
+            var yExtent = d3.extent(newArr, d => Number(d.close));
+
+            var xScale = d3.scaleTime().domain(xExtent).range([0, width]);
+            var yScale = d3.scaleLinear().domain(yExtent).range([height, 0]);
+
+            var xAxis = d3.axisBottom().scale(xScale).ticks(4);
+            svg.append('g').attr('class', 'axis').call(xAxis).attr('transform', `translate(${0}, ${height})`);
+
+            var yAxis = d3.axisLeft().scale(yScale).ticks(4);
+            svg.append('g').attr('class', 'axis').call(yAxis);
+
+            var line = d3.line().x(d => xScale(d.date)).y(d => yScale(d['close']));
+
+            svg.append('path')
+                .attr('class', 'path')
+                .attr('d', line(newArr))
+                .attr('fill', 'none')
+                .attr('stroke', 'blue')
+                .attr('stroke-width', '2px')
+                .attr('stroke-dasharray', document.querySelector('.path').getTotalLength())
+                .attr('stroke-dashoffset', document.querySelector('.path').getTotalLength())
+                .transition().style('stroke-dashoffset', '0').duration(2000);
+
+            var bisectDate = d3.bisector(function (d) { return d.date; }).left;
+
+            svg.append("rect")
+                .attr("width", width)
+                .attr("height", height)
+                .style("fill", "none")
+                .style("pointer-events", "all")
+                .on("mouseover", function () { focus.style("display", "initial"); })
+                .on("mouseout", function () { focus.style("display", "none"); })
+                .on('mousemove', function () {
+                    var x0 = xScale.invert(d3.mouse(this)[0]),
+                        i = bisectDate(newArr, x0),
+                        d0 = newArr[i - 1],
+                        d1 = newArr[i],
+                        d = x0 - d0.date > d1.date - x0 ? d1 : d0;
+
+                    focus.select("circle.y")
+                        .attr("transform",
+                        "translate(" + xScale(d.date) + "," +
+                        yScale(d.close) + ")");
+
+                    focus.select("text.y1")
+                        .attr("transform",
+                        "translate(" + xScale(d.date) + "," +
+                        yScale(d.close) + ")")
+                        .text(d.close);
+
+                    focus.select("text.y2")
+                        .attr("transform",
+                        "translate(" + xScale(d.date) + "," +
+                        yScale(d.close) + ")")
+                        .text(d.close);
+
+                    focus.select("text.y3")
+                        .attr("transform",
+                        "translate(" + xScale(d.date) + "," +
+                        yScale(d.close) + ")")
+                    // .text(formatDate(d.date));
+
+                    focus.select("text.y4")
+                        .attr("transform",
+                        "translate(" + xScale(d.date) + "," +
+                        yScale(d.close) + ")")
+                    //  .text(formatDate(d.date));
+
+                    focus.select(".x")
+                        .attr("transform",
+                        "translate(" + xScale(d.date) + "," +
+                        yScale(d.close) + ")")
+                        .attr("y2", height - yScale(d.close));
+
+                    focus.select(".y")
+                        .attr("transform",
+                        "translate(" + width * -1 + "," +
+                        yScale(d.close) + ")")
+                        .attr("x2", width + width);
+
+                });
+
+            var focus = svg.append("g")
+                .style("display", "none");
+
+            // append the x line
+            focus.append("line")
+                .attr("class", "x")
+                .style("stroke", "white")
+                .style("stroke-dasharray", "3,5")
+                .style("opacity", 0.5)
+                .attr("y1", 0)
+                .attr("y2", height);
+
+            // append the y line
+            focus.append("line")
+                .attr("class", "y")
+                .style("stroke", "white")
+                .style("stroke-dasharray", "3,3")
+                .style("opacity", 0.5)
+                .attr("x1", width)
+                .attr("x2", width);
+
+            // append the circle at the intersection
+            focus.append("circle")
+                .attr("class", "y")
+                .style("fill", "none")
+                .style("stroke", "white")
+                .attr("r", 4);
+
+            // place the value at the intersection
+            focus.append("text")
+                .attr("class", "y1")
+                .style("stroke", "white")
+                .style("stroke-width", "3.5px")
+                .style("opacity", 0.8)
+                .attr("dx", 8)
+                .attr("dy", "-.3em");
+
+            focus.append("text")
+                .attr("class", "y2")
+                .attr("dx", 8)
+                .attr("dy", "-.3em");
+
+            // place the date at the intersection
+            focus.append("text")
+                .attr("class", "y3")
+                .style("stroke", "white")
+                .style("stroke-width", "3.5px")
+                .style("opacity", 0.8)
+                .attr("dx", 8)
+                .attr("dy", "1em");
+            focus.append("text")
+                .attr("class", "y4")
+                .attr("dx", 8)
+                .attr("dy", "1em");
+        }
+    </script>
+</body>
+
+</html>
